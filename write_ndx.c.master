@@ -1,0 +1,143 @@
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+
+int main (int argc, char** argv)
+{
+
+  // files to read data
+  FILE *frag_size,*atom_ndx;
+  frag_size = fopen("cluster_size.txt","r");
+  atom_ndx  = fopen("fragment_id.txt","r");
+
+  // constrcut string to match timestep line
+  //   also construct separate string for next time step
+  char tline[20],tplusline[20],tplus[9];
+  strcpy(tline,"Timestep: ");
+  strcpy(tplusline,"Timestep: ");
+
+  strcat(tline,argv[1]);
+  snprintf(tplus, 8, "%d", atoi( argv[1] ) + TSTEP);
+  strcat(tplusline,tplus);
+
+  strcat(tline,"\n");
+  strcat(tplusline,"\n");
+
+  // total number of beads in the trajectory
+  int n_atoms = NATOMS;
+
+  // read frag_size file, locate timestep
+  //   find largest fragment id in timestep
+  //   read atom_ndx file, locate timestep
+  //   find indices corresponding to largest fragment id
+
+  // read file line by line
+  char* line=NULL;
+  size_t len=120;
+
+  do
+    getline(&line,&len,frag_size);
+  while((strcmp(line,tline))); // locate timestep
+
+  printf(line);
+
+  int largest_size=0;
+  int largest_id=5;
+  int id;
+  ssize_t line_size;
+
+  // getline once to read the first line
+  line_size=getline(&line,&len,frag_size);
+  while(strcmp(line,tplusline) && line_size>=0)
+  {
+    char* token = strtok(line," ");
+    int tmp=0;
+    while(token!=NULL)
+    {
+      if (tmp==0)
+        id=atoi(token);
+      if (tmp==1 && atoi(token)>largest_size)
+      {
+        largest_size=atoi(token);
+        largest_id=id;
+      }
+      tmp++;
+      token=strtok(NULL," ");
+    }
+    line_size=getline(&line,&len,frag_size);
+  }
+
+  printf("%d %d\n",largest_id, largest_size);
+
+  // constrcut string to match timestep line in atom_ndx file
+  memset(tline,0,18);
+  memset(tplusline,0,18);
+
+  strcpy(tline,argv[1]);
+  strcpy(tplusline,"ITEM: TIMESTEP\n");
+
+  strcat(tline,"\n");
+
+  do
+    getline(&line,&len,atom_ndx);
+  while((strcmp(line,tline))); // locate time step
+
+  // getline once to read the first line
+  line_size = getline(&line,&len,atom_ndx);
+
+  // Output file
+  FILE *fout=fopen("afile.txt","w");
+
+  //print header
+  fprintf(fout,"%d\n",n_atoms);
+
+  while(strcmp(line,tplusline) && line_size>=0)
+  {
+    // if natoms line, skip the next line read next line and continue
+    if(!strcmp(line,"ITEM: NUMBER OF ATOMS\n"))
+    {
+      line_size = getline(&line,&len,atom_ndx);
+    }
+
+    // if box bounds line, skip 4 lines, read next, continue
+    else if(!strcmp(line,"ITEM: BOX BOUNDS pp pp pp\n"))
+    {
+      line_size = getline(&line,&len,atom_ndx);
+      line_size = getline(&line,&len,atom_ndx);
+      line_size = getline(&line,&len,atom_ndx);
+      line_size = getline(&line,&len,atom_ndx);
+    }
+
+    else
+    {
+      // split the string at " "
+      //   first part is atom id; second is fragment id
+      //   if frag id == largest id; print 1
+      //   else print 0
+      char *token = strtok(line," ");
+      int tmp=0;
+      while(token!=NULL)
+      {
+        if (tmp==0)
+          id=atoi(token);
+        if (tmp==1 && atoi(token)==largest_id)
+        {
+          fprintf(fout,"%d 1\n",id);
+        }
+        else if(tmp==1 && atoi(token)!=largest_id)
+        {
+          fprintf(fout,"%d 0\n",id);
+        }
+        tmp++;
+        token=strtok(NULL," ");
+      }
+    }
+    line_size = getline(&line,&len,atom_ndx);
+  }
+
+  // fclose
+  fclose(frag_size);
+  fclose(atom_ndx);
+  fclose(fout);
+  return 0;
+}

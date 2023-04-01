@@ -1,0 +1,80 @@
+##**************** rerun *****************
+##***********************************************
+# simulation setup DUMMY VALUES
+#***********************************************
+units          lj
+atom_style     molecular
+boundary       p  p  p
+bond_style     harmonic
+angle_style    cosine/squared
+lattice        fcc   3.0
+comm_modify    cutoff 4.0 vel yes
+
+# initial geometry INITIAL NUMBER OF ATOMS AND TOPOLOGY
+#***********************************************
+read_data      config.dat 
+
+# interaction parameter setting DUMMY VALUES
+#***********************************************
+mass             *   1.0
+bond_coeff       *   500.0   0.70
+special_bonds  lj   1  1  1
+newton         on
+
+pair_style     dpd  1.0  1.0  120753 
+pair_coeff     *     *   78.000    4.5   1.0
+
+
+#============================================
+#============================================
+# ANALYSIS SETUP
+#============================================
+#============================================
+
+# thermo output
+#***********************************************
+thermo         100
+
+# read indices of largest fragment
+#**********************************************
+variable       fragID    atomfile atomfile.txt
+
+# setup analysis loop over time steps
+#**********************************************
+variable lpstep loop 1 INDEX
+
+# fix print for computed quantity
+#********************************************** 
+fix extra         all   print 1 "$(step) ${rg}" screen no file rg.txt
+fix print_shape   all   print 1 "$(step) ${l1} ${l2} ${l3} ${I1} ${I2} ${I3} ${ksquare}"  screen no file shape.txt
+
+# loop over time steps
+label loop
+
+  # evaluate current time step from loop index
+  variable tstep equal (TSTART+(${lpstep}-1)*TSTEP)
+
+  # create group and compute property
+  group    largest   variable fragID 
+
+  compute  gyr        largest gyration
+  compute  calc_shape largest gyration/shape gyr      
+  variable rg      equal c_gyr
+  variable l1      equal   c_calc_shape[1]
+  variable l2      equal   c_calc_shape[2]
+  variable l3      equal   c_calc_shape[3]
+  variable I1      equal   v_l1+v_l2+v_l3
+  variable I2      equal   v_l1*v_l2+v_l2*v_l3+v_l1*v_l3
+  variable I3      equal   v_l1+v_l2+v_l3
+  variable ksquare equal   1-3*v_I2/(v_I1*v_I1)
+
+  rerun    traj.lammpstrj first ${tstep} last ${tstep}  dump type x y z ix iy iz replace yes
+ 
+  uncompute gyr
+  uncompute calc_shape
+  group largest delete
+  
+  next fragID
+  next lpstep
+
+jump SELF loop
